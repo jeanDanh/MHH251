@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++11 -Wall -Wextra -g
-TARGET = pnmlParser
-SOURCES = pnmlParser.cpp petriNet.cpp tinyxml2.cpp
+TARGET = main
+SOURCES = main.cpp petriNet.cpp tinyxml2.cpp
 OBJECTS = $(SOURCES:.cpp=.o) #write the filenames on SOURCES (familiarity) then OBJECTS automatically generate as many
 all: $(TARGET) run clean
 $(TARGET): $(OBJECTS)
