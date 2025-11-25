@@ -10,7 +10,7 @@ int main() {
         
         std::cout << "\n========================================\n" << std::endl;
         
-        // Task 3: Symbolic reachability
+        // Task 3: Symbolic computation
         SymbolicPetriNet symNet(net);
         symNet.initialize();
         symNet.encodeInitialMarking();
