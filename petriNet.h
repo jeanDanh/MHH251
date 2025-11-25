@@ -5,10 +5,11 @@
 #include <vector>
 #include <sstream>
 #include <stdexcept>
-#include "tinyxml2.h"
-using namespace tinyxml2;
-using namespace std;
+#include "tinyxml2.h" //include thư viện ngoài parse pnml
+using namespace tinyxml2; //namespace
+using namespace std; //namespace
 
+//Cấu trúc Place  
 struct Place {
     string id;
     string name;
