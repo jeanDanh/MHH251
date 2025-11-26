@@ -16,13 +16,13 @@ public:
     void computeReachability();
     void printResults();
 private:
-    PetriNet net;
-    DdManager* mgr;
-    map<string, int> placeToCurrentVar;
+    PetriNet net; //the petri net
+    DdManager* BDD_ops; //pointer to DdManager utilities to get useful BDD operations
+    map<string, int> placeToCurrentVar;//std::map uses a red black tree to sort 
     map<string, int> placeToNextVar;
     DdNode* initialState;
     DdNode* reachableStates;
-    vector<DdNode*> transitionRelations;
+    vector<DdNode*> transitionRelations; //many many addresses of transition relations
     int numPlaces;
     int numTransitions;
 private:

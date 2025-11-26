@@ -1,23 +1,26 @@
 #include "symbolicPetriNet.h"
 #include <iostream>
 
-SymbolicPetriNet::SymbolicPetriNet(const PetriNet& petriNet) 
-    : net(petriNet), mgr(nullptr), initialState(nullptr), 
-      reachableStates(nullptr), numPlaces(petriNet.places.size()), 
-      numTransitions(petriNet.transitions.size()) {
+SymbolicPetriNet::SymbolicPetriNet(const PetriNet& petriNet){
+    this->net = petriNet;
+    this->BDD_ops = nullptr;
+    this->initialState = nullptr;
+    this->reachableStates = nullptr;
+    this->numPlaces = petriNet.places.size(); 
+    this->numTransitions = petriNet.transitions.size();
 }
 
 SymbolicPetriNet::~SymbolicPetriNet() {
-    if (mgr) {
-        Cudd_Quit(mgr);
+    if (BDD_ops) {
+        Cudd_Quit(BDD_ops);
     }
 }
 
 void SymbolicPetriNet::initialize() {
     int numVars = 2 * numPlaces;
-    mgr = Cudd_Init(numVars, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+    BDD_ops = Cudd_Init(numVars, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
     
-    if (!mgr) {
+    if (!BDD_ops) {
         throw std::runtime_error("Failed to initialize CUDD");
     }
     
@@ -31,7 +34,7 @@ void SymbolicPetriNet::initialize() {
 }
 
 void SymbolicPetriNet::encodeInitialMarking() {
-    initialState = Cudd_ReadOne(mgr);
+    initialState = Cudd_ReadOne(BDD_ops);
     Cudd_Ref(initialState);
     
     std::cout << "[Task 3] Encoded initial marking" << std::endl;
@@ -80,15 +83,15 @@ DdNode* SymbolicPetriNet::getTransitionRelation(int transIdx) {
         }
     }
     
-    DdNode* relation = Cudd_ReadOne(mgr);
+    DdNode* relation = Cudd_ReadOne(BDD_ops);
     Cudd_Ref(relation);
     
     for (const auto& placeId : inputPlaces) {
         int currentVar = placeToCurrentVar[placeId];
-        DdNode* var = Cudd_bddIthVar(mgr, currentVar);
-        DdNode* temp = Cudd_bddAnd(mgr, relation, var);
+        DdNode* var = Cudd_bddIthVar(BDD_ops, currentVar);
+        DdNode* temp = Cudd_bddAnd(BDD_ops, relation, var);
         Cudd_Ref(temp);
-        Cudd_RecursiveDeref(mgr, relation);
+        Cudd_RecursiveDeref(BDD_ops, relation);
         relation = temp;
     }
     
@@ -100,23 +103,23 @@ DdNode* SymbolicPetriNet::getTransitionRelation(int transIdx) {
         bool isInput = inputPlaces.count(placeId) > 0;
         bool isOutput = outputPlaces.count(placeId) > 0;
         
-        DdNode* currentVarNode = Cudd_bddIthVar(mgr, currentVar);
-        DdNode* nextVarNode = Cudd_bddIthVar(mgr, nextVar);
+        DdNode* currentVarNode = Cudd_bddIthVar(BDD_ops, currentVar);
+        DdNode* nextVarNode = Cudd_bddIthVar(BDD_ops, nextVar);
         DdNode* effect;
         
         if (isInput && isOutput) {
-            effect = Cudd_bddXnor(mgr, currentVarNode, nextVarNode);
+            effect = Cudd_bddXnor(BDD_ops, currentVarNode, nextVarNode);
         } else if (isInput && !isOutput) {
             effect = Cudd_Not(nextVarNode);
         } else if (!isInput && isOutput) {
             effect = nextVarNode;
         } else {
-            effect = Cudd_bddXnor(mgr, currentVarNode, nextVarNode);
+            effect = Cudd_bddXnor(BDD_ops, currentVarNode, nextVarNode);
         }
         
-        DdNode* temp = Cudd_bddAnd(mgr, relation, effect);
+        DdNode* temp = Cudd_bddAnd(BDD_ops, relation, effect);
         Cudd_Ref(temp);
-        Cudd_RecursiveDeref(mgr, relation);
+        Cudd_RecursiveDeref(BDD_ops, relation);
         relation = temp;
     }
     return relation;
@@ -137,24 +140,24 @@ void SymbolicPetriNet::computeReachability() {
         DdNode* newStates = imageComputation(reachableStates);
         Cudd_Ref(newStates);
         
-        DdNode* novel = Cudd_bddAnd(mgr, newStates, Cudd_Not(reachableStates));
+        DdNode* novel = Cudd_bddAnd(BDD_ops, newStates, Cudd_Not(reachableStates));
         Cudd_Ref(novel);
         
-        bool foundNew = (novel != Cudd_ReadLogicZero(mgr));
+        bool foundNew = (novel != Cudd_ReadLogicZero(BDD_ops));
         
-        Cudd_RecursiveDeref(mgr, novel);
+        Cudd_RecursiveDeref(BDD_ops, novel);
         
         if (!foundNew) {
-            Cudd_RecursiveDeref(mgr, newStates);
+            Cudd_RecursiveDeref(BDD_ops, newStates);
             std::cout << "[Task 3] Fixed point reached at iteration " 
                       << iteration << std::endl;
             break;
         }
         
-        DdNode* temp = Cudd_bddOr(mgr, reachableStates, newStates);
+        DdNode* temp = Cudd_bddOr(BDD_ops, reachableStates, newStates);
         Cudd_Ref(temp);
-        Cudd_RecursiveDeref(mgr, reachableStates);
-        Cudd_RecursiveDeref(mgr, newStates);
+        Cudd_RecursiveDeref(BDD_ops, reachableStates);
+        Cudd_RecursiveDeref(BDD_ops, newStates);
         reachableStates = temp;
         
         if (iteration > 1000) {
@@ -166,19 +169,19 @@ void SymbolicPetriNet::computeReachability() {
 
 DdNode* SymbolicPetriNet::imageComputation(DdNode* states) {
     // TODO: Implement
-    DdNode * result = Cudd_ReadLogicZero(mgr);
+    DdNode * result = Cudd_ReadLogicZero(BDD_ops);
     Cudd_Ref(result);
 
     for (const auto& transRel : transitionRelations) {
-        DdNode* temp = Cudd_bddAnd(mgr, states, transRel);
+        DdNode* temp = Cudd_bddAnd(BDD_ops, states, transRel);
         Cudd_Ref(temp);
         
         for (int i = 0; i < numPlaces; i++) {
             int currentVar = placeToCurrentVar[net.places[i].id];
-            DdNode* cube = Cudd_bddIthVar(mgr, currentVar);
-            DdNode* temp2 = Cudd_bddExistAbstract(mgr, temp, cube);
+            DdNode* cube = Cudd_bddIthVar(BDD_ops, currentVar);
+            DdNode* temp2 = Cudd_bddExistAbstract(BDD_ops, temp, cube);
             Cudd_Ref(temp2);
-            Cudd_RecursiveDeref(mgr, temp);
+            Cudd_RecursiveDeref(BDD_ops, temp);
             temp = temp2;
         }
         
@@ -194,15 +197,15 @@ DdNode* SymbolicPetriNet::imageComputation(DdNode* states) {
             permutation[nextVar] = currentVar;
         }
         
-        DdNode* renamed = Cudd_bddPermute(mgr, temp, permutation);
+        DdNode* renamed = Cudd_bddPermute(BDD_ops, temp, permutation);
         Cudd_Ref(renamed);
         delete[] permutation;
-        Cudd_RecursiveDeref(mgr, temp);
+        Cudd_RecursiveDeref(BDD_ops, temp);
         
-        DdNode* newResult = Cudd_bddOr(mgr, result, renamed);
+        DdNode* newResult = Cudd_bddOr(BDD_ops, result, renamed);
         Cudd_Ref(newResult);
-        Cudd_RecursiveDeref(mgr, result);
-        Cudd_RecursiveDeref(mgr, renamed);
+        Cudd_RecursiveDeref(BDD_ops, result);
+        Cudd_RecursiveDeref(BDD_ops, renamed);
         result = newResult;
     }
     
@@ -213,5 +216,10 @@ void SymbolicPetriNet::printResults() {
     std::cout << "\n========== TASK 3: SYMBOLIC REACHABILITY ==========" << std::endl;
     std::cout << "Number of places: " << numPlaces << std::endl;
     std::cout << "Number of transitions: " << numTransitions << std::endl;
+    
+    // Count reachable states
+    double stateCount = Cudd_CountMinterm(BDD_ops, reachableStates, numPlaces);
+    std::cout << "Number of reachable states: " << stateCount << std::endl;
+    
     std::cout << "===================================================" << std::endl;
 }
