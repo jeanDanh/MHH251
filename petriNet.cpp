@@ -14,26 +14,35 @@ int findTransition(const vector<Transition>& transitions, const string& id) {
     return -1;
 }
 
+/*
+Chức năng: load file PNML
+Đầu vào: const string& filename
+Đầu ra: PetriNet
+(Ctrl+click để xem chi tiết)
+*/
 PetriNet loadPNML(const string& filename) {
-    PetriNet net;
-    XMLDocument doc;
+    PetriNet net;                                                                //PetriNet sẽ được trả về
+    XMLDocument doc;                                                             //XMLDocument offer hàng ngàn tính năng đọc XML và thao tác trên cấu trúc XML đã parsed
+    if (doc.LoadFile(filename.c_str()) != XML_SUCCESS)                           //Hàm LoadFile() làm 3 việc: đọc file, parse file, check lỗi
+        throw runtime_error("Cannot open PNML file or XML format error!");       //quăng lỗi (nếu ko đọc được) và chương trình dừng lại.
 
-    if (doc.LoadFile(filename.c_str()) != XML_SUCCESS)
-        throw runtime_error("Cannot open PNML file or XML format error!");
+    XMLElement* pnml = doc.FirstChildElement("pnml");                            //địa chỉ dẫn đến <pnml> tag trong simple_example>pnml
+    if (!pnml) throw runtime_error("Invalid PNML: missing <pnml>");              //quăng lỗi ko thấy <pnml>
 
-    XMLElement* pnml = doc.FirstChildElement("pnml");
-    if (!pnml) throw runtime_error("Invalid PNML: missing <pnml>");
+    XMLElement* netTag = pnml->FirstChildElement("net");                         //địa chỉ <net> tag trong simple_example.pnml
+    if (!netTag) throw runtime_error("Invalid PNML: missing <net>");             //quăng lỗi ko thấy <net>
 
-    XMLElement* netTag = pnml->FirstChildElement("net");
-    if (!netTag) throw runtime_error("Invalid PNML: missing <net>");
-
-    XMLElement* rootNode = netTag->FirstChildElement("page");
-    if (!rootNode) rootNode = netTag; 
+    XMLElement* rootNode = netTag->FirstChildElement("page");                    //địa chỉ <page> tag 
+    if (!rootNode) rootNode = netTag;                                            //quăng lỗi ko thấy <page>
 
     // ----- Đọc Places -----
+    
     for (XMLElement* p = rootNode->FirstChildElement("place"); p; p = p->NextSiblingElement("place")) {
+        //vòng lặp p từ <place> đầu tiên đến <place> cuối cùng. 
+        //Giải thích: p đi từ first child, lặp đi lặp lại duyệt qua các sibling rồi kết thúc khi p == nullptr.
+        
         Place place;
-        const char* idAttr = p->Attribute("id");
+        const char* idAttr = p->Attribute("id");                                 //
         if (!idAttr) continue;
         place.id = idAttr;
 

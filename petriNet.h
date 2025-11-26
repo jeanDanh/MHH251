@@ -9,9 +9,6 @@
 using namespace tinyxml2; //namespace 
 using namespace std; //namespace
 
-
-
-
 //các cấu trúc cấu thành  
 struct Place {
     string id;
@@ -28,10 +25,11 @@ struct Arc {
     string target;
 };
 
+//PetriNet, 3 attrs: places, transitions, arcs
 struct PetriNet {
-    vector<Place> places; //mảng động chứa các Place
-    vector<Transition> transitions; //mảng động chứa Transition
-    vector<Arc> arcs;//mảng động chứa các đường nối (Place -> Transition) + (Transition -> Place) 
+    vector<Place> places; //mảng động chứa các Place, 1 attr PetriNet
+    vector<Transition> transitions; //mảng động chứa Transition, 1 attr PetriNet
+    vector<Arc> arcs;//mảng động chứa các đường nối (Place -> Transition) + (Transition -> Place), 1 attr PetriNet
 };
 
 //các hàm có thể dùng, implemented ở petriNet.cpp
