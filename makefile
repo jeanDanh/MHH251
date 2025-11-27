@@ -7,7 +7,10 @@ INCLUDES = -I$(CUDD_DIR)/include -I$(OR_TOOLS_DIR)/include
 CXXFLAGS = -std=c++17 -Wall -Wextra -g -fPIC $(INCLUDES)
 
 LDFLAGS = -L$(CUDD_DIR)/lib -L$(OR_TOOLS_DIR)/lib \
-          -lcudd -lortools -lz -lrt -lpthread \
+          -lcudd \
+          -lortools \
+          -lprotobuf \
+          -lz -lrt -lpthread \
           -Wl,-rpath,'$$ORIGIN/$(CUDD_DIR)/lib' \
           -Wl,-rpath,'$$ORIGIN/$(OR_TOOLS_DIR)/lib'
 

@@ -9,6 +9,7 @@ using namespace std;
 void testLoadAndDetect() {
     cout << "\n[TEST 1] Loading simple_example.pnml and detecting deadlock..." << endl;
     try {
+        // Lưu ý: Đảm bảo file simple_example.pnml tồn tại cùng thư mục chạy
         PetriNet net = loadPNML("simple_example.pnml");
         
         SymbolicPetriNet symNet(net);
@@ -34,8 +35,7 @@ void testManualDeadlock() {
      * Simple Deadlock Scenario:
      * P1 (1 token) -> T1 -> P2
      * P2 has no outgoing transitions.
-     * 
-     * Initial: {P1=1, P2=0}
+     * * Initial: {P1=1, P2=0}
      * Fire T1 -> {P1=0, P2=1} -> DEADLOCK
      */
     
@@ -69,7 +69,10 @@ void testManualDeadlock() {
         detector.printResults();
         
         if (hasDeadlock) {
-            vector<int> deadlockMarking = detector.getDeadlockMarking();
+            // --- ĐOẠN SỬA LỖI Ở ĐÂY ---
+            // Lấy ra struct Marking, sau đó truy cập vào thuộc tính .tokens (là vector<int>)
+            vector<int> deadlockMarking = detector.getDeadlockMarking().tokens;
+            
             // Expecting {P1=0, P2=1}
             // Note: Order depends on how places are stored/indexed.
             // Here p1 is index 0, p2 is index 1.
@@ -77,6 +80,9 @@ void testManualDeadlock() {
                 cout << "[TEST 2] PASSED: Correct deadlock marking found." << endl;
             } else {
                 cout << "[TEST 2] FAILED: Incorrect deadlock marking." << endl;
+                cout << "Found: ";
+                for(int t : deadlockMarking) cout << t << " ";
+                cout << endl;
             }
         } else {
             cout << "[TEST 2] FAILED: Deadlock NOT detected." << endl;

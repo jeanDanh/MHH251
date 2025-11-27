@@ -14,16 +14,19 @@ public:
     ~DeadlockDetector();
     bool detectDeadlock();
     void printResults();
-    vector<int> getDeadlockMarking() const;
+    Marking getDeadlockMarking() const;
 
 private:
     const PetriNet& net;                    
     SymbolicPetriNet& symbolicNet;          
     DdManager* BDD_ops;                     
     
-    vector<int> deadlockMarking;            
+    Marking deadlockMarking;
     bool deadlockFound;                      
-    double detectionTime;                    
+    double detectionTime;     
+    
+    int numPlaces;
+    int numTransitions;
 
     bool isTransitionEnabled(int transitionIdx, const vector<int>& marking);
 };

@@ -13,7 +13,11 @@ using namespace operations_research;
 DeadlockDetector::DeadlockDetector(const PetriNet& petriNet, SymbolicPetriNet& symNet)
     : net(petriNet), symbolicNet(symNet), deadlockFound(false), detectionTime(0.0) {
     BDD_ops = symbolicNet.getBDDManager();
-    deadlockMarking.resize(net.places.size(), 0);
+    deadlockFound = false;
+    numPlaces = net.places.size();
+    numTransitions = net.transitions.size();
+    
+    deadlockMarking.tokens.assign(numPlaces, 0);
 }
 
 DeadlockDetector::~DeadlockDetector() {}
@@ -40,132 +44,146 @@ bool DeadlockDetector::isTransitionEnabled(int transitionIdx, const vector<int>&
  * - Không: M là spurious (giả). Thêm constraint vào ILP để loại bỏ M. Quay lại B1.
  */
 bool DeadlockDetector::detectDeadlock() {
-    cout << "\n[Task 4] Bat dau tim deadlock (ILP + BDD)..." << endl;
-    auto startTime = high_resolution_clock::now();
+    // đo runtime
+    auto start = high_resolution_clock::now();
+    std::cout << "[Task 4] Bat dau tim deadlock (ILP + BDD)..." << std::endl;
 
-    // 1. Khởi tạo Solver
     std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver("SCIP"));
     if (!solver) {
+        std::cout << "[Task 4] Warning: SCIP not available, switching to CBC..." << std::endl;
         solver.reset(MPSolver::CreateSolver("CBC_MIXED_INTEGER_PROGRAMMING"));
     }
+
     if (!solver) {
-        cerr << "ERROR: Khong khoi tao duoc ILP Solver (OR-Tools)!" << endl;
+        std::cerr << "[Task 4] Error: Neither SCIP nor CBC solver available." << std::endl;
         return false;
     }
 
-    int numPlaces = net.places.size();
-    
-    // 2. Tạo biến: x[i] là số token tại place i (Binary 0/1 vì là 1-safe Petri net)
-    vector<MPVariable*> x(numPlaces);
+    // tạo VARIABLES cho PETRI
+    // Mỗi Place p tương ứng với một biến x_p trong bài toán ILP.
+    // Vì mạng là 1-safe (theo đề bài), số token tại mỗi place chỉ có thể là 0 hoặc 1.
+    // Do đó, ta tạo biến nhị phân (Integer Var từ 0 đến 1).
+    std::vector<MPVariable*> vars;
     for (int i = 0; i < numPlaces; ++i) {
-        x[i] = solver->MakeIntVar(0, 1, "x_" + net.places[i].id);
+        // Biến x_0, x_1, ... tương ứng với token tại Place 0, Place 1...
+        vars.push_back(solver->MakeIntVar(0.0, 1.0, "x_" + std::to_string(i)));
     }
 
-    // 3. Tất cả transition đều KHÔNG THỂ FIRE (Disabled)
-    // Một transition T bị disabled <=> Tồn tại ít nhất 1 input place P không có token.
-    // Trong ILP với 1-safe net: Tổng token của input places <= (Số input places) - 1
-    // Sum(x_p) <= |Inputs| - 1
+    // Một trạng thái là "Dead" nếu KHÔNG CÓ transition nào kích hoạt được (disabled).
+    // Transition t bị disable khi: Tổng số token ở các Input Place < Tổng trọng số cung đầu vào.
+    // Công thức: Sum(weight * x_p) <= TotalInputWeight - 1
     
-    int constraintCount = 0;
-    for (size_t t = 0; t < net.transitions.size(); ++t) {
-        string transId = net.transitions[t].id;
-        vector<int> inputIndices;
+    for (const auto& t : net.transitions) {
+        double totalInputWeight = 0;
+        std::vector<std::pair<int, double>> inputPlaces;
 
-        // Tìm tất cả input places của transition t
+        // Duyệt qua các cung (arc) để tìm Input Places của transition t
         for (const auto& arc : net.arcs) {
-            if (arc.target == transId) {
-                for (int i = 0; i < numPlaces; ++i) {
-                    if (net.places[i].id == arc.source) {
-                        inputIndices.push_back(i);
-                        break;
-                    }
+            if (arc.target == t.id) { // Nếu cung đi vào t
+                int pIdx = findPlace(net.places, arc.source);
+                if (pIdx != -1) {
+                    double w = (double)arc.weight;
+                    inputPlaces.push_back({pIdx, w});
+                    totalInputWeight += w;
                 }
             }
         }
 
-        // Nếu transition không có input nào -> Luôn enabled -> Không bao giờ có deadlock
-        if (inputIndices.empty()) {
-            cout << "  Transition " << transId << " khong co input -> Luôn enabled -> NO DEADLOCK." << endl;
-            return false; 
+        // Nếu transition không có đầu vào -> Luôn enabled -> Mạng không bao giờ deadlock.
+        if (inputPlaces.empty()) {
+            continue; 
         }
 
-        // Thêm ràng buộc: Sum(x_p) <= K - 1
-        MPConstraint* ct = solver->MakeRowConstraint(-MPSolver::infinity(), inputIndices.size() - 1.0);
-        for (int idx : inputIndices) {
-            ct->SetCoefficient(x[idx], 1.0);
+        // Tạo constraint cho transition t:
+        // Ví dụ: t cần p1 + p2 >= 2 để chạy. Muốn t disable thì p1 + p2 <= 1.
+        // MakeRowConstraint tạo biểu thức: -vocung <= ... <= (totalWeight - 1)
+        MPConstraint* ct = solver->MakeRowConstraint(-MPSolver::infinity(), totalInputWeight - 1.0);
+        
+        // Thêm hệ số cho các biến vào constraint
+        for (const auto& input : inputPlaces) {
+            ct->SetCoefficient(vars[input.first], input.second);
         }
-        constraintCount++;
     }
 
-    // 4. Vòng lặp CEGAR
-    int iteration = 0;
-    while (true) {
-        iteration++;
-        // Giải ILP
-        const MPSolver::ResultStatus resultStatus = solver->Solve();
+    // CEGAR (TÌM KIẾM - KIỂM TRA - LOẠI BỎ)
+    bool foundRealDeadlock = false;
 
-        // Nếu ILP vô nghiệm -> Không tồn tại trạng thái chết nào -> Không deadlock
+    while (true) {
+        // giải ILP để tìm một "Candidate Deadlock" (Trạng thái chết tiềm năng)
+        MPSolver::ResultStatus resultStatus = solver->Solve();
+
+        // Nếu Solver không tìm ra nghiệm -> Không còn trạng thái chết nào -> Hệ thống an toàn.
         if (resultStatus != MPSolver::OPTIMAL && resultStatus != MPSolver::FEASIBLE) {
-            cout << "[Iter " << iteration << "] ILP vo nghiem -> Done." << endl;
+            std::cout << "[Task 4] Khong tim thay (hoac khong con) trang thai Dead." << std::endl;
             break;
         }
 
-        // Lấy marking ứng viên từ ILP
-        vector<int> candidate(numPlaces);
-        int onesCount = 0;
+        // lấy nghiệm TỪ SOLVER
+        std::vector<int> candidate(numPlaces);
+        int activeTokens = 0; // Đếm số lượng place có token (giá trị = 1)
         for (int i = 0; i < numPlaces; ++i) {
-            candidate[i] = (int)(x[i]->solution_value() + 0.5); 
-            if (candidate[i] == 1) onesCount++;
+            // Lấy giá trị biến x_i 
+            int val = (int)(vars[i]->solution_value() + 0.5);
+            candidate[i] = val;
+            if (val > 0) activeTokens++;
         }
 
-        // Kiểm tra marking này có Reachable không?
+        // check REACHABILITY = BDD (Task 3)
+        // check marking 'candidate' này có nằm trong tập reachableStates?"
         if (symbolicNet.contains(candidate)) {
+            // === case 1: TÌM THẤY DEADLOCK THẬT ===
             deadlockFound = true;
-            deadlockMarking = candidate;
+            deadlockMarking.tokens = candidate;
+            foundRealDeadlock = true;
+            std::cout << "[Task 4] DA TIM THAY DEADLOCK (Reachable)." << std::endl;
+            break; // Thoát vòng lặp ngay lập tức
+        } else {
+            // === case 2: DEADLOCK GIẢ (SPURIOUS) ===
+            std::cout << "[Task 4] Phat hien Spurious Deadlock (Unreachable). Them rang buoc loai bo..." << std::endl;
+            // Mục tiêu: Bắt buộc Solver lần sau KHÔNG ĐƯỢC trả về đúng bộ (x_0...x_n) này nữa.
+            // Công thức Canonical Cut cho biến nhị phân:
+            // (Tổng các biến đang bằng 1) - (Tổng các biến đang bằng 0) <= (Số lượng biến bằng 1) - 1
+            // Ý nghĩa: Ít nhất 1 biến phải đảo giá trị (0->1 hoặc 1->0).
             
-            auto endTime = high_resolution_clock::now();
-            detectionTime = duration_cast<milliseconds>(endTime - startTime).count();
-            return true;
-        } 
-        else {
-            // Marking này là Dead (cấu trúc) nhưng KHÔNG Reachable (Spurious).
-            // Thêm "Cut Constraint" để loại bỏ nghiệm này khỏi không gian tìm kiếm ILP.
-            // Canonical Cut: Sum(x_i | val=1) - Sum(x_j | val=0) <= (So luong so 1) - 1
-            
-            MPConstraint* cut = solver->MakeRowConstraint(-MPSolver::infinity(), onesCount - 1.0);
+            MPConstraint* cut = solver->MakeRowConstraint(-MPSolver::infinity(), activeTokens - 1.0);
             for (int i = 0; i < numPlaces; ++i) {
-                if (candidate[i] == 1) {
-                    cut->SetCoefficient(x[i], 1.0);
+                if (candidate[i] > 0) {
+                    // Nếu biến này đang là 1 trong candidate, hệ số là +1
+                    cut->SetCoefficient(vars[i], 1.0);
                 } else {
-                    cut->SetCoefficient(x[i], -1.0);
+                    // Nếu biến này đang là 0 trong candidate, hệ số là -1
+                    cut->SetCoefficient(vars[i], -1.0);
                 }
             }
+            // Solver tìm nghiệm khác tránh nghiệm vừa loại bỏ.
         }
     }
 
-    auto endTime = high_resolution_clock::now();
-    detectionTime = duration_cast<milliseconds>(endTime - startTime).count();
-    return false;
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stop - start);
+    detectionTime = duration.count();
+
+    return foundRealDeadlock;
 }
 
 void DeadlockDetector::printResults() {
-    cout << "\n========== TASK 4: DEADLOCK DETECTION ==========" << endl;
-    cout << "Time: " << detectionTime << " ms" << endl;
-    
+    std::cout << "========== TASK 4: DEADLOCK DETECTION ==========" << std::endl;
     if (deadlockFound) {
-        cout << "*** DEADLOCK DETECTED ***" << endl;
-        cout << "Deadlock Marking: [ ";
+        std::cout << "*** DEADLOCK DETECTED ***" << std::endl;
+        std::cout << "Deadlock Marking: [ ";
         for (size_t i = 0; i < net.places.size(); i++) {
-            if (deadlockMarking[i] == 1)
-                cout << net.places[i].id << " ";
+            if (deadlockMarking.tokens[i] > 0) {
+                // In ra tên place nếu có token
+                std::cout << net.places[i].id << "(" << deadlockMarking.tokens[i] << ") ";
+            }
         }
-        cout << "]" << endl;
+        std::cout << "]" << std::endl;
     } else {
-        cout << "*** NO DEADLOCK FOUND ***" << endl;
+        std::cout << "No deadlock found." << std::endl;
     }
-    cout << "===================================================" << endl;
+    std::cout << "===================================================" << std::endl;
 }
 
-vector<int> DeadlockDetector::getDeadlockMarking() const {
-    return deadlockMarking;
+Marking DeadlockDetector::getDeadlockMarking() const { 
+    return deadlockMarking; 
 }
