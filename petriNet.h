@@ -47,7 +47,7 @@ PetriNet loadPNML(const string& filename);
 void verify(const PetriNet& net);
 void printPetriNetInfo(const PetriNet& net);
 
-//===================================== Xây bảng in/out arcs =================================================
+//===================================== Xây bảng in/out arcs,implemented ở petriNet.cpp =================================================
 void buildTables(const PetriNet& net, vector<vector<pair<int,int>>>& inArcs, vector<vector<pair<int,int>>>& outArcs);
 bool isEnabled(const Marking& M, int t, const vector<vector<pair<int,int>>>& inArcs);
 Marking fire(const Marking& M, int t, const vector<vector<pair<int,int>>>& inArcs, const vector<vector<pair<int,int>>>& outArcs);
