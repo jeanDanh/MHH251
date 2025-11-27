@@ -36,26 +36,26 @@ PetriNet loadPNML(const string& filename) {
     if (!rootNode) rootNode = netTag;                                            //quăng lỗi ko thấy <page>
 
     // ----- Đọc Places -----
-    
+
     for (XMLElement* p = rootNode->FirstChildElement("place"); p; p = p->NextSiblingElement("place")) {
         //vòng lặp p từ <place> đầu tiên đến <place> cuối cùng. 
         //Giải thích: p đi từ first child, lặp đi lặp lại duyệt qua các sibling rồi kết thúc khi p == nullptr.
         
         Place place;
-        const char* idAttr = p->Attribute("id");                                 //
-        if (!idAttr) continue;
-        place.id = idAttr;
+        const char* idAttr = p->Attribute("id");                                 //id attribute, ví dụ: <place id="place_1">, idAttr = "place_1"
+        if (!idAttr) continue;                                                   //idAttr null, sang iteration mới
+        place.id = idAttr;                                                       //place.id = idAttr
 
         // name
-        if (auto nameTag = p->FirstChildElement("name")) {
-            if (auto textTag = nameTag->FirstChildElement("text"))
-                place.name = textTag->GetText();
+        if (auto nameTag = p->FirstChildElement("name")) {                       //child đầu tiên, có first child là name (nếu)
+            if (auto textTag = nameTag->FirstChildElement("text"))               //trong nameTag có text (nếu)
+                place.name = textTag->GetText();                                 //cập nhật place.name = textTag->GetText(); <name><text>Start</text></name> "Start"
         }
 
         // initial marking
-        if (auto markTag = p->FirstChildElement("initialMarking")) {
-            if (auto textTag = markTag->FirstChildElement("text")) {
-                try {
+        if (auto markTag = p->FirstChildElement("initialMarking")) {             //child đầu tiên initialMarking?
+            if (auto textTag = markTag->FirstChildElement("text")) {             //chứa text?
+                try {                                                            //convert string thành int.ví dụ: "1" thành 1
                     place.initialMarking = stoi(textTag->GetText());
                 } catch (...) { place.initialMarking = 0; }
             }
