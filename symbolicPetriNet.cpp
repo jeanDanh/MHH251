@@ -36,6 +36,24 @@ void SymbolicPetriNet::initialize() {
 void SymbolicPetriNet::encodeInitialMarking() {
     initialState = Cudd_ReadOne(BDD_ops);
     Cudd_Ref(initialState);
+
+    for (int i = 0; i < numPlaces; i++) {
+        std::string pId = net.places[i].id;
+        int varIdx = placeToCurrentVar[pId];
+        DdNode* var = Cudd_bddIthVar(BDD_ops, varIdx);
+        DdNode* temp;
+
+        // If place has a token (1-safe), AND with var. Else AND with NOT var.
+        if (net.places[i].initialMarking > 0) {
+            temp = Cudd_bddAnd(BDD_ops, initialState, var);
+        } else {
+            temp = Cudd_bddAnd(BDD_ops, initialState, Cudd_Not(var));
+        }
+        
+        Cudd_Ref(temp);
+        Cudd_RecursiveDeref(BDD_ops, initialState);
+        initialState = temp;
+    }
     
     std::cout << "[Task 3] Encoded initial marking" << std::endl;
 }
@@ -187,13 +205,15 @@ DdNode* SymbolicPetriNet::imageComputation(DdNode* states) {
         
         int* permutation = new int[2 * numPlaces];
         for (int i = 0; i < 2 * numPlaces; i++) {
-            permutation[i] = i;  // Identity by default
+            permutation[i] = i; 
         }
 
         for (int i = 0; i < numPlaces; i++) {
             std::string placeId = net.places[i].id;
             int currentVar = placeToCurrentVar[placeId];
             int nextVar = placeToNextVar[placeId];
+            
+            permutation[currentVar] = nextVar;
             permutation[nextVar] = currentVar;
         }
         
@@ -222,4 +242,52 @@ void SymbolicPetriNet::printResults() {
     std::cout << "Number of reachable states: " << stateCount << std::endl;
     
     std::cout << "===================================================" << std::endl;
+}
+
+/*
+ * Kiểm tra xem một marking cụ thể có nằm trong tập reachableStates hay không.
+ */
+bool SymbolicPetriNet::contains(const vector<int>& marking) {
+    if (marking.size() != net.places.size()) return false;
+
+    DdNode* temp = reachableStates;
+    Cudd_Ref(temp); // Tăng ref count để giữ node gốc
+
+    // Duyệt qua từng place để đi xuống cây BDD
+    for (size_t i = 0; i < net.places.size(); i++) {
+        string pId = net.places[i].id;
+        
+        // Tìm biến BDD tương ứng với place này
+        if (placeToCurrentVar.find(pId) == placeToCurrentVar.end()) {
+            Cudd_RecursiveDeref(BDD_ops, temp);
+            return false;
+        }
+        int varIdx = placeToCurrentVar[pId];
+
+        DdNode* varNode = Cudd_bddIthVar(BDD_ops, varIdx);
+        DdNode* nextNode;
+
+        // Nếu marking tại place i là 1 -> đi theo nhánh THEN (AND với var)
+        // Nếu marking tại place i là 0 -> đi theo nhánh ELSE (AND với NOT var)
+        if (marking[i] > 0) {
+            nextNode = Cudd_bddAnd(BDD_ops, temp, varNode);
+        } else {
+            nextNode = Cudd_bddAnd(BDD_ops, temp, Cudd_Not(varNode));
+        }
+        
+        Cudd_Ref(nextNode);
+        Cudd_RecursiveDeref(BDD_ops, temp); // Giảm ref node cũ
+        temp = nextNode;
+
+        // Nếu đi vào ngõ cụt (Zero) thì marking không tồn tại
+        if (temp == Cudd_ReadLogicZero(BDD_ops)) {
+            Cudd_RecursiveDeref(BDD_ops, temp);
+            return false;
+        }
+    }
+
+    // Nếu đi hết các biến mà không gặp Zero -> Marking tồn tại
+    bool result = (temp != Cudd_ReadLogicZero(BDD_ops));
+    Cudd_RecursiveDeref(BDD_ops, temp);
+    return result;
 }

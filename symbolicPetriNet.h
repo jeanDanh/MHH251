@@ -15,6 +15,8 @@ public:
     void buildTransitionRelations();
     void computeReachability();
     void printResults();
+    bool contains(const vector<int>& marking);
+    DdManager* getBDDManager() const { return BDD_ops; }
 private:
     PetriNet net; //the petri net
     DdManager* BDD_ops; //pointer to DdManager utilities to get useful BDD operations
