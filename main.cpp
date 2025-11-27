@@ -1,5 +1,7 @@
 #include "petriNet.h"
 #include "symbolicPetriNet.h"
+#include "deadlockDetector.h"
+
 
 int main() {
     try {
@@ -24,6 +26,11 @@ int main() {
         symNet.buildTransitionRelations();
         symNet.computeReachability();
         symNet.printResults();
+
+        // Task 4: Deadlock detection
+        DeadlockDetector detector(net, symNet);
+        detector.detectDeadlock();
+        detector.printResults();
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
