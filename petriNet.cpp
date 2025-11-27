@@ -157,3 +157,102 @@ void printPetriNetInfo(const PetriNet& net) {
     }
     cout << "================================================" << endl;
 }
+
+
+
+//===================================== Xây bảng in/out arcs =================================================
+void buildTables(const PetriNet& net, vector<vector<pair<int,int>>>& inArcs, vector<vector<pair<int,int>>>& outArcs) {
+    int T = net.transitions.size();
+    inArcs.assign(T, {});
+    outArcs.assign(T, {});
+
+    for (auto& arc : net.arcs) {
+        int placeSource = findPlace(net.places, arc.source);
+        int placeTarget = findPlace(net.places, arc.target);
+        int transScource = findTransition(net.transitions, arc.source);
+        int transTarget = findTransition(net.transitions, arc.target);
+
+        if (placeSource != -1 && transTarget != -1)
+            inArcs[transTarget].push_back({placeSource, arc.weight});
+
+        if (transScource != -1 && placeTarget != -1)
+            outArcs[transScource].push_back({placeTarget, arc.weight});
+    }
+}
+
+//====================================== Kiểm tra xem có thể fire không ======================================
+bool isEnabled(const Marking& M, int t, const vector<vector<pair<int,int>>>& inArcs) {
+    for (auto pr : inArcs[t]) {
+        if (M.tokens[pr.first] < pr.second) 
+            return false;
+    }
+    return true;
+}
+
+
+//===================================== Firing ===============================================================
+Marking fire(const Marking& M, int t, const vector<vector<pair<int,int>>>& inArcs, const vector<vector<pair<int,int>>>& outArcs) {
+    Marking M2 = M;
+
+    for (auto pr : inArcs[t])
+        M2.tokens[pr.first] -= pr.second;
+
+    for (auto pr : outArcs[t])
+        M2.tokens[pr.first] += pr.second;
+
+    return M2;
+}
+
+
+//======================================= Check visited ======================================================
+bool visitedHas(const vector<Marking>& visited, const Marking& M) {
+    for (auto& v : visited)
+        if (v == M) return true;
+    return false;
+}
+
+
+//=======================================  BFS  ==============================================================
+vector<Marking> BFS(const PetriNet& net) {
+    vector<vector<pair<int,int>>> inArcs, outArcs;
+    buildTables(net, inArcs, outArcs);
+
+    Marking M0;
+    for (auto& p : net.places)
+        M0.tokens.push_back(p.initialMarking);
+
+    vector<Marking> visited;
+    vector<Marking> q;
+    int head = 0;
+
+    visited.push_back(M0);
+    q.push_back(M0);
+
+    while (head < (int)q.size()) {
+        Marking curr = q[head];
+        head++;
+
+        for (int t = 0; t < (int)net.transitions.size(); t++) {
+            if (isEnabled(curr, t, inArcs)) {
+                Marking M2 = fire(curr, t, inArcs, outArcs);
+
+                if (!visitedHas(visited, M2)) {
+                    visited.push_back(M2);
+                    q.push_back(M2);
+                }
+            }
+        }
+    }
+
+    return visited;
+}
+
+
+void printMarking(const Marking& M) {
+    cout << "(";
+    for (int i = 0; i < (int)M.tokens.size(); i++) {
+        cout << M.tokens[i];
+        if (i < (int)M.tokens.size()-1) cout << ",";
+    }
+    cout << ")";
+}
