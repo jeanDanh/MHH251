@@ -36,26 +36,26 @@ PetriNet loadPNML(const string& filename) {
     if (!rootNode) rootNode = netTag;                                            //quăng lỗi ko thấy <page>
 
     // ----- Đọc Places -----
-    
+
     for (XMLElement* p = rootNode->FirstChildElement("place"); p; p = p->NextSiblingElement("place")) {
         //vòng lặp p từ <place> đầu tiên đến <place> cuối cùng. 
         //Giải thích: p đi từ first child, lặp đi lặp lại duyệt qua các sibling rồi kết thúc khi p == nullptr.
         
         Place place;
-        const char* idAttr = p->Attribute("id");                                 //
-        if (!idAttr) continue;
-        place.id = idAttr;
+        const char* idAttr = p->Attribute("id");                                 //id attribute, ví dụ: <place id="place_1">, idAttr = "place_1"
+        if (!idAttr) continue;                                                   //idAttr null, sang iteration mới
+        place.id = idAttr;                                                       //place.id = idAttr
 
         // name
-        if (auto nameTag = p->FirstChildElement("name")) {
-            if (auto textTag = nameTag->FirstChildElement("text"))
-                place.name = textTag->GetText();
+        if (auto nameTag = p->FirstChildElement("name")) {                       //child đầu tiên, có first child là name (nếu)
+            if (auto textTag = nameTag->FirstChildElement("text"))               //trong nameTag có text (nếu)
+                place.name = textTag->GetText();                                 //cập nhật place.name = textTag->GetText(); <name><text>Start</text></name> "Start"
         }
 
         // initial marking
-        if (auto markTag = p->FirstChildElement("initialMarking")) {
-            if (auto textTag = markTag->FirstChildElement("text")) {
-                try {
+        if (auto markTag = p->FirstChildElement("initialMarking")) {             //child đầu tiên initialMarking?
+            if (auto textTag = markTag->FirstChildElement("text")) {             //chứa text?
+                try {                                                            //convert string thành int.ví dụ: "1" thành 1
                     place.initialMarking = stoi(textTag->GetText());
                 } catch (...) { place.initialMarking = 0; }
             }
@@ -129,7 +129,7 @@ void verify(const PetriNet& net) {
 }
 
 void printPetriNetInfo(const PetriNet& net) {
-    cout << "\n================ PETRI NET INFO ================" << endl;
+    cout << "\n================ TASK 1: PARSE PNML ================" << endl;
 
     // 1. In danh sách Places
     cout << "--- "<<net.places.size() << " places ---" << endl;
@@ -156,4 +156,103 @@ void printPetriNetInfo(const PetriNet& net) {
              << " | " << a.source << " -> " << a.target << endl;
     }
     cout << "================================================" << endl;
+}
+
+
+
+//===================================== Xây bảng in/out arcs =================================================
+void buildTables(const PetriNet& net, vector<vector<pair<int,int>>>& inArcs, vector<vector<pair<int,int>>>& outArcs) {
+    int T = net.transitions.size();
+    inArcs.assign(T, {});
+    outArcs.assign(T, {});
+
+    for (auto& arc : net.arcs) {
+        int placeSource = findPlace(net.places, arc.source);
+        int placeTarget = findPlace(net.places, arc.target);
+        int transScource = findTransition(net.transitions, arc.source);
+        int transTarget = findTransition(net.transitions, arc.target);
+
+        if (placeSource != -1 && transTarget != -1)
+            inArcs[transTarget].push_back({placeSource, arc.weight});
+
+        if (transScource != -1 && placeTarget != -1)
+            outArcs[transScource].push_back({placeTarget, arc.weight});
+    }
+}
+
+//====================================== Kiểm tra xem có thể fire không ======================================
+bool isEnabled(const Marking& M, int t, const vector<vector<pair<int,int>>>& inArcs) {
+    for (auto pr : inArcs[t]) {
+        if (M.tokens[pr.first] < pr.second) 
+            return false;
+    }
+    return true;
+}
+
+
+//===================================== Firing ===============================================================
+Marking fire(const Marking& M, int t, const vector<vector<pair<int,int>>>& inArcs, const vector<vector<pair<int,int>>>& outArcs) {
+    Marking M2 = M;
+
+    for (auto pr : inArcs[t])
+        M2.tokens[pr.first] -= pr.second;
+
+    for (auto pr : outArcs[t])
+        M2.tokens[pr.first] += pr.second;
+
+    return M2;
+}
+
+
+//======================================= Check visited ======================================================
+bool visitedHas(const vector<Marking>& visited, const Marking& M) {
+    for (auto& v : visited)
+        if (v == M) return true;
+    return false;
+}
+
+
+//=======================================  BFS  ==============================================================
+vector<Marking> BFS(const PetriNet& net) {
+    vector<vector<pair<int,int>>> inArcs, outArcs;
+    buildTables(net, inArcs, outArcs);
+
+    Marking M0;
+    for (auto& p : net.places)
+        M0.tokens.push_back(p.initialMarking);
+
+    vector<Marking> visited;
+    vector<Marking> q;
+    int head = 0;
+
+    visited.push_back(M0);
+    q.push_back(M0);
+
+    while (head < (int)q.size()) {
+        Marking curr = q[head];
+        head++;
+
+        for (int t = 0; t < (int)net.transitions.size(); t++) {
+            if (isEnabled(curr, t, inArcs)) {
+                Marking M2 = fire(curr, t, inArcs, outArcs);
+
+                if (!visitedHas(visited, M2)) {
+                    visited.push_back(M2);
+                    q.push_back(M2);
+                }
+            }
+        }
+    }
+
+    return visited;
+}
+
+
+void printMarking(const Marking& M) {
+    cout << "(";
+    for (int i = 0; i < (int)M.tokens.size(); i++) {
+        cout << M.tokens[i];
+        if (i < (int)M.tokens.size()-1) cout << ",";
+    }
+    cout << ")";
 }
