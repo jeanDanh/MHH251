@@ -7,8 +7,7 @@ int main() {
         PetriNet net = loadPNML("simple_example.pnml");
         verify(net);
         printPetriNetInfo(net);
-        
-        std::cout << "\n========================================\n" << std::endl;
+
         
         // Task 2: BFS to enumerate all reachable markings from init
         vector<Marking> R = BFS(net);
@@ -18,8 +17,6 @@ int main() {
             printMarking(R[i]);
             cout << "\n";
         }
-
-        std::cout << "\n========================================\n" << std::endl;
         // Task 3: Symbolic computation
         SymbolicPetriNet symNet(net);
         symNet.initialize();

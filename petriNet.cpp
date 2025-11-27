@@ -129,7 +129,7 @@ void verify(const PetriNet& net) {
 }
 
 void printPetriNetInfo(const PetriNet& net) {
-    cout << "\n================ PETRI NET INFO ================" << endl;
+    cout << "\n================ TASK 1: PARSE PNML ================" << endl;
 
     // 1. In danh sách Places
     cout << "--- "<<net.places.size() << " places ---" << endl;
