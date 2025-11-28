@@ -19,7 +19,7 @@ TARGET_TASK3 = task3
 TARGET_TASK4 = task4
 
 SOURCES_TASK1 = main.cpp petriNet.cpp tinyxml2.cpp
-SOURCES_TASK3 = main.cpp petriNet.cpp symbolicPetriNet.cpp tinyxml2.cpp
+SOURCES_TASK3 = main.cpp petriNet.cpp symbolicPetriNet.cpp tinyxml2.cpp deadlockDetector.cpp
 SOURCES_TASK4 = test_task4.cpp deadlockDetector.cpp petriNet.cpp symbolicPetriNet.cpp tinyxml2.cpp
 
 OBJECTS_TASK1 = $(SOURCES_TASK1:.cpp=.o)
