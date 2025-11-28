@@ -14,9 +14,10 @@ public:
     void encodeInitialMarking();
     void buildTransitionRelations();
     void computeReachability();
-    void printResults();
     bool contains(const vector<int>& marking);
+    void printResults();
     DdManager* getBDDManager() const { return BDD_ops; }
+    long long getBDDMemory() const { return Cudd_ReadMemoryInUse(BDD_ops);}
 private:
     PetriNet net; //the petri net
     DdManager* BDD_ops; //pointer to DdManager utilities to get useful BDD operations

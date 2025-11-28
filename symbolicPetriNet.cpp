@@ -12,6 +12,11 @@ SymbolicPetriNet::SymbolicPetriNet(const PetriNet& petriNet){
 
 SymbolicPetriNet::~SymbolicPetriNet() {
     if (BDD_ops) {
+        if (initialState) Cudd_RecursiveDeref(BDD_ops, initialState);
+        if (reachableStates) Cudd_RecursiveDeref(BDD_ops, reachableStates);
+        for (DdNode* relation : transitionRelations) {
+            Cudd_RecursiveDeref(BDD_ops, relation);
+        }
         Cudd_Quit(BDD_ops);
     }
 }
@@ -134,10 +139,11 @@ DdNode* SymbolicPetriNet::getTransitionRelation(int transIdx) {
         } else {
             effect = Cudd_bddXnor(BDD_ops, currentVarNode, nextVarNode);
         }
-        
+        Cudd_Ref(effect);
         DdNode* temp = Cudd_bddAnd(BDD_ops, relation, effect);
         Cudd_Ref(temp);
         Cudd_RecursiveDeref(BDD_ops, relation);
+        Cudd_RecursiveDeref(BDD_ops, effect);
         relation = temp;
     }
     return relation;
